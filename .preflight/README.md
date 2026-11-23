@@ -23,3 +23,5 @@ Read the saved original hook directory in `git rev-parse --git-common-dir` / `au
 ## Tests
 
 `python3 -m unittest discover -s .preflight/tests -v` (or `tools/git-preflight/tests` in this source repository) creates disposable repositories and remotes. It proves actual push blocking, success, dirty-source isolation, changed commits, multi-ref/non-HEAD pushes, deletion, failure aggregation, timeouts, dependency validation, fetched-base availability and original hook preservation. No live repository is pushed by these tests.
+
+The installer refuses relative `core.hooksPath` values before changing configuration: Git resolves those differently across worktrees and hook types. Reconcile that existing setup explicitly first. Absolute and home-relative (`~/`) paths are supported; original hook files are never edited. Removed or disabled original hooks are skipped, matching Git behavior. Installation works from any subdirectory.

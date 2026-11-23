@@ -62,7 +62,7 @@ class GitPreflightTest(unittest.TestCase):
         old=self.repo/'custom hooks';old.mkdir()
         script=old/'pre-push';script.write_text('#!/bin/sh\nprintf "%s\\n" "$1" > "'+str(self.root/'args')+'"\ncat > "'+str(self.root/'stdin')+'"\n');script.chmod(0o755)
         other=old/'pre-commit';other.write_text('#!/bin/sh\nexit 0\n');other.chmod(0o755)
-        self.git('config','core.hooksPath','custom hooks');self.install();self.install()
+        self.git('config','core.hooksPath',str(old));self.install();self.install()
         self.assertEqual(self.push().returncode,0)
         self.assertEqual((self.root/'args').read_text().strip(),'origin')
         self.assertIn('refs/heads/check',(self.root/'stdin').read_text())
@@ -73,7 +73,7 @@ class GitPreflightTest(unittest.TestCase):
         old=self.repo/'custom';old.mkdir()
         (self.repo/'outside-helper').write_text('exit 0\n')
         hook=old/'pre-commit';hook.write_text('#!/bin/sh\n. "$(dirname "$0")/../outside-helper"\n');hook.chmod(0o755)
-        self.git('config','core.hooksPath','custom');self.install()
+        self.git('config','core.hooksPath',str(old));self.install()
         self.write('more.txt','change');self.commit()
     def test_fetched_base_available_in_snapshot(self):
         other=self.root/'other'
@@ -160,3 +160,47 @@ class GitPreflightTest(unittest.TestCase):
         self.git('remote','set-url','origin','fixture://remote')
         result=self.git('-c','url.'+str(self.remote)+'.insteadOf=fixture://remote','push','origin','HEAD:feature',check=False)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_install_from_subdirectory_uses_repo_git_directory(self):
+        self.run_cmd([sys.executable, 'install.py'], self.repo/'.preflight')
+        self.assertEqual(Path(self.git('config','core.hooksPath').stdout.strip()), (self.repo/'.git/aulron-preflight-hooks').resolve())
+        self.assertEqual(self.push().returncode,0)
+
+    def test_removed_original_hook_no_longer_blocks_commit(self):
+        hook=self.repo/'.git/hooks/pre-commit'
+        hook.write_text('#!/bin/sh\nexit 42\n');hook.chmod(0o755)
+        self.install();hook.unlink()
+        self.git('commit','--allow-empty','-m','removed hook')
+        self.install()
+        self.git('commit','--allow-empty','-m','reinstalled')
+
+    def test_upgrade_skips_removed_hook_and_preserves_unrelated_dispatcher_file(self):
+        import shlex
+        original=self.repo/'.git/hooks/pre-commit'
+        original.write_text('#!/bin/sh\nexit 42\n');original.chmod(0o755)
+        self.install()
+        hooks=Path(self.git('config','core.hooksPath').stdout.strip())
+        (hooks/'pre-commit').write_text('#!/bin/sh\nexec '+shlex.quote(str(original.resolve()))+' "$@"\n')
+        (hooks/'personal.txt').write_text('keep me')
+        original.unlink();self.install()
+        self.git('commit','--allow-empty','-m','upgraded removed hook')
+        self.assertEqual((hooks/'personal.txt').read_text(),'keep me')
+
+    def test_disabled_original_hook_no_longer_blocks_commit(self):
+        hook=self.repo/'.git/hooks/pre-commit'
+        hook.write_text('#!/bin/sh\nexit 42\n');hook.chmod(0o755)
+        self.install();hook.chmod(0o644)
+        self.git('commit','--allow-empty','-m','disabled hook')
+
+    def test_relative_hooks_refused_without_weakening_linked_worktree(self):
+        linked=self.root/'linked'
+        self.git('worktree','add','-b','linked',str(linked))
+        for root,code in [(self.repo,0),(linked,42)]:
+            hooks=root/'.hooks';hooks.mkdir()
+            hook=hooks/'pre-commit';hook.write_text('#!/bin/sh\nexit '+str(code)+'\n');hook.chmod(0o755)
+        self.git('config','core.hooksPath','.hooks')
+        result=self.run_cmd([sys.executable,'.preflight/install.py'],check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('relative hooksPath',result.stdout+result.stderr)
+        self.assertEqual(self.git('config','core.hooksPath').stdout.strip(),'.hooks')
+        self.assertNotEqual(self.run_cmd(['git','commit','--allow-empty','-m','blocked'],linked,check=False).returncode,0)
