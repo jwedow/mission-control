@@ -1,0 +1,39 @@
+name: Preflight
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: preflight-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Run shared validation
+        env:
+          PREFLIGHT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$PREFLIGHT_BASE" ] && git cat-file -e "$PREFLIGHT_BASE^{commit}" 2>/dev/null; then
+            python3 .preflight/preflight.py --base "$PREFLIGHT_BASE"
+          else
+            python3 .preflight/preflight.py
+          fi

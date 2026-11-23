@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "base": "main",
+  "environment": {
+    "NEXT_TELEMETRY_DISABLED": "1",
+    "GIT_AUTHOR_NAME": "Preflight Fixture",
+    "GIT_AUTHOR_EMAIL": "preflight@example.invalid",
+    "GIT_COMMITTER_NAME": "Preflight Fixture",
+    "GIT_COMMITTER_EMAIL": "preflight@example.invalid"
+  },
+  "tasks": [
+    {
+      "id": "source-syntax",
+      "command": [
+        "python3",
+        ".preflight/checks.py"
+      ],
+      "timeout": 120
+    },
+    {
+      "id": "preflight-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".preflight/tests",
+        "-v"
+      ],
+      "timeout": 180
+    },
+    {
+      "id": "dependencies",
+      "command": [
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "timeout": 900
+    },
+    {
+      "id": "api:parity",
+      "command": [
+        "pnpm",
+        "api:parity"
+      ],
+      "timeout": 1200,
+      "needs": [
+        "dependencies"
+      ]
+    },
+    {
+      "id": "lint",
+      "command": [
+        "pnpm",
+        "lint"
+      ],
+      "timeout": 1200,
+      "needs": [
+        "dependencies"
+      ]
+    },
+    {
+      "id": "typecheck",
+      "command": [
+        "pnpm",
+        "typecheck"
+      ],
+      "timeout": 1200,
+      "needs": [
+        "dependencies"
+      ]
+    },
+    {
+      "id": "test",
+      "command": [
+        "pnpm",
+        "test"
+      ],
+      "timeout": 1200,
+      "needs": [
+        "dependencies"
+      ]
+    },
+    {
+      "id": "build",
+      "command": [
+        "bash",
+        "-c",
+        "cp .env.test .env && pnpm build"
+      ],
+      "timeout": 1200,
+      "needs": [
+        "typecheck",
+        "test"
+      ]
+    }
+  ],
+  "cloud_checks": [
+    "Existing Quality Gate browser E2E tests retain their hosted browser installation"
+  ]
+}
