@@ -129,4 +129,21 @@ class GitPreflightTest(unittest.TestCase):
         self.manifest([self.task('slow','import time; time.sleep(5)',timeout=1)]);self.commit();self.install()
         p=self.push();self.assertNotEqual(p.returncode,0);self.assertIn('FAIL slow',p.stdout+p.stderr)
 
-if __name__=='__main__':unittest.main()
+
+
+    def test_symlinked_hook_keeps_invocation_name(self):
+        hook=self.repo/'.git/hooks/pre-commit'
+        target=self.root/'dispatcher'
+        target.write_text('#!/bin/sh\n[ "$(basename "$0")" != pre-commit ]\n');target.chmod(0o755)
+        hook.symlink_to(target)
+        self.assertNotEqual(self.git('commit','--allow-empty','-m','before',check=False).returncode,0)
+        self.run_cmd([sys.executable,'.preflight/install.py'])
+        self.assertNotEqual(self.git('commit','--allow-empty','-m','after',check=False).returncode,0)
+
+    def test_linked_worktree_push_preserves_branch(self):
+        wt=self.root/'linked'
+        self.git('worktree','add','-b','feature',str(wt))
+        self.run_cmd([sys.executable,'.preflight/install.py'],cwd=wt)
+        result=self.run_cmd(['git','push','origin','feature'],cwd=wt,check=False)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(self.run_cmd(['git','symbolic-ref','--short','HEAD'],cwd=wt).stdout.strip(),'feature')

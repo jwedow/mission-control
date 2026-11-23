@@ -12,8 +12,12 @@ import tempfile
 
 VERSION = '1.0.0'
 
+def git_env():
+    local=subprocess.check_output(['git','rev-parse','--local-env-vars'],text=True).splitlines()
+    return {k:v for k,v in os.environ.items() if k not in local}
+
 def git(*args, cwd=None):
-    return subprocess.check_output(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', *args], cwd=cwd, text=True).strip()
+    return subprocess.check_output(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', *args], cwd=cwd, env=git_env(), text=True).strip()
 
 def load_manifest(root):
     data = json.loads((root / '.preflight/manifest.json').read_text())
@@ -80,7 +84,7 @@ def run(root, base=None, jobs=2):
                     if result['status']=='FAIL':print(result['output'],flush=True)
         for check in data.get('cloud_checks',[]): print('CLOUD REQUIRED: '+check)
         print('Preflight: '+', '.join(f'{s}={sum(r["status"]==s for r in results.values())}' for s in ['PASS','FAIL','SKIP']))
-        unchanged=subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=root).returncode==0
+        unchanged=subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=root,env=git_env()).returncode==0
         if not unchanged:print('FAIL source-integrity: validation changed tracked source (or checkout was already dirty)')
         return unchanged and all(r['status']=='PASS' for r in results.values())
 

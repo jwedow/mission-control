@@ -35,7 +35,7 @@ def install():
             if path.name=='pre-push' or not path.is_file():continue
             target=dest/path.name
             if target.is_symlink():target.unlink()
-            target.write_text('#!/bin/sh\nexec '+shlex.quote(str(path.resolve()))+' \"$@\"\n')
+            target.write_text('#!/bin/sh\nexec '+shlex.quote(str(path.absolute()))+' \"$@\"\n')
             target.chmod(path.stat().st_mode & 0o777)
     shutil.copyfile(Path(__file__).with_name('preflight.py'),dest/'preflight.py')
     data={'marker':MARKER,'previous':str(previous)}
