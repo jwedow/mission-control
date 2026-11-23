@@ -154,3 +154,9 @@ class GitPreflightTest(unittest.TestCase):
         self.git('checkout','--detach','HEAD^')
         result=self.git('push','origin','ready',check=False)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+    def test_source_fetch_preserves_command_url_configuration(self):
+        self.run_cmd([sys.executable,'.preflight/install.py'])
+        self.git('remote','set-url','origin','fixture://remote')
+        result=self.git('-c','url.'+str(self.remote)+'.insteadOf=fixture://remote','push','origin','HEAD:feature',check=False)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)

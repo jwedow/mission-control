@@ -12,12 +12,14 @@ import tempfile
 
 VERSION = '1.0.0'
 
-def git_env():
+def git_env(source_config=False):
     local=subprocess.check_output(['git','rev-parse','--local-env-vars'],text=True).splitlines()
+    if source_config:
+        local=[k for k in local if k not in ['GIT_CONFIG_PARAMETERS','GIT_CONFIG_COUNT']]
     return {k:v for k,v in os.environ.items() if k not in local}
 
-def git(*args, cwd=None):
-    return subprocess.check_output(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', *args], cwd=cwd, env=git_env(), text=True).strip()
+def git(*args, cwd=None, source_config=False):
+    return subprocess.check_output(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', *args], cwd=cwd, env=git_env(source_config), text=True).strip()
 
 def load_manifest(root):
     data = json.loads((root / '.preflight/manifest.json').read_text())
@@ -119,7 +121,7 @@ def push(repo, args):
             branch=manifest.get('base','main')
             git('check-ref-format','refs/heads/'+branch,cwd=repo)
             if branch not in bases:
-                git('fetch','--quiet','--no-tags','--',remote,'refs/heads/'+branch,cwd=repo)
+                git('fetch','--quiet','--no-tags','--',remote,'refs/heads/'+branch,cwd=repo,source_config=True)
                 bases[branch]=git('rev-parse','FETCH_HEAD^{commit}',cwd=repo)
             base=bases[branch]
             print('Verified target base '+base,flush=True)
