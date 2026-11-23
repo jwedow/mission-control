@@ -110,17 +110,20 @@ def push(repo, args):
         commit=git('rev-parse',sha+'^{commit}',cwd=repo)
         if commit not in revisions:revisions.append(commit)
     if not revisions:return True
-    manifest=load_manifest(repo)
-    branch=manifest.get('base','main')
     # Read remote base and fetch it without changing the author's branches or working files.
     remote=args.remote or 'origin'
-    git('check-ref-format','refs/heads/'+branch,cwd=repo)
-    git('fetch','--quiet','--no-tags','--',remote,'refs/heads/'+branch,cwd=repo)
-    base=git('rev-parse','FETCH_HEAD^{commit}',cwd=repo)
-    print('Verified target base '+base,flush=True)
-    success=True
+    success=True; bases={}
     for revision in revisions:
-        try:success=snapshot_check(repo,revision,base,args.jobs) and success
+        try:
+            manifest=json.loads(git('show',revision+':.preflight/manifest.json',cwd=repo))
+            branch=manifest.get('base','main')
+            git('check-ref-format','refs/heads/'+branch,cwd=repo)
+            if branch not in bases:
+                git('fetch','--quiet','--no-tags','--',remote,'refs/heads/'+branch,cwd=repo)
+                bases[branch]=git('rev-parse','FETCH_HEAD^{commit}',cwd=repo)
+            base=bases[branch]
+            print('Verified target base '+base,flush=True)
+            success=snapshot_check(repo,revision,base,args.jobs) and success
         except (ValueError,OSError,subprocess.CalledProcessError) as exc:
             print('FAIL snapshot: '+str(exc),file=sys.stderr);success=False
     return success

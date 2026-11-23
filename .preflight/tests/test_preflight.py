@@ -147,3 +147,10 @@ class GitPreflightTest(unittest.TestCase):
         result=self.run_cmd(['git','push','origin','feature'],cwd=wt,check=False)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertEqual(self.run_cmd(['git','symbolic-ref','--short','HEAD'],cwd=wt).stdout.strip(),'feature')
+
+    def test_nonhead_push_from_checkout_without_manifest(self):
+        self.run_cmd([sys.executable,'.preflight/install.py'])
+        self.git('branch','ready')
+        self.git('checkout','--detach','HEAD^')
+        result=self.git('push','origin','ready',check=False)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
