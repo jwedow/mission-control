@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 def git_env(source_config=False):
     local=subprocess.check_output(['git','rev-parse','--local-env-vars'],text=True).splitlines()
@@ -40,6 +40,14 @@ def load_manifest(root):
         if not ready: raise ValueError('dependency cycle')
         done |= ready
         for key in ready: del pending[key]
+    selected=data.get('push_tasks',ids)
+    if (not isinstance(selected,list) or not selected or
+            any(not isinstance(x,str) for x in selected) or
+            len(set(selected))!=len(selected) or not set(selected)<=set(ids)):
+        raise ValueError('push_tasks must be a nonempty list of unique known task ids')
+    for task in tasks:
+        if task['id'] in selected and not set(task.get('needs',[]))<=set(selected):
+            raise ValueError('push_tasks omits dependency: '+task['id'])
     return data
 
 def execute(task, root, env):
@@ -55,7 +63,7 @@ def execute(task, root, env):
     except OSError as exc:
         return {'id':task['id'],'status':'FAIL','code':127,'output':str(exc)}
 
-def run(root, base=None, jobs=2):
+def run(root, base=None, jobs=2, push_profile=False):
     data=load_manifest(root)
     # Do not pass the developer's tokens, .env files or global package-manager config to checks.
     keep=['PATH','SYSTEMROOT','TMPDIR','TEMP','TMP','LANG','LC_ALL','USER','LOGNAME']
@@ -66,6 +74,9 @@ def run(root, base=None, jobs=2):
         env.update(data.get('environment',{}))
         if base:env.update(BASE_SHA=base,TURBO_SCM_BASE=base,EVENT_NAME='pull_request')
         results={};pending=list(data['tasks'])
+        if push_profile and 'push_tasks' in data:
+            pending=[task for task in pending if task['id'] in data['push_tasks']]
+            print('Push checks only; full application validation remains required in GitHub.',flush=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             active={}
             while pending or active:
@@ -99,7 +110,7 @@ def snapshot_check(repo, revision, base, jobs):
         git('checkout','--quiet','--detach',revision,cwd=dest)
         actual=git('rev-parse','HEAD',cwd=dest)
         print('Checking committed source '+actual,flush=True)
-        return run(dest,base,jobs)
+        return run(dest,base,jobs,push_profile=True)
 
 def push(repo, args):
     # Git supplies every ref update. Validate every distinct pushed commit, not merely HEAD.

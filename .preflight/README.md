@@ -1,6 +1,6 @@
 # Git Preflight
 
-Canonical source: `jwedow/AtlasAX-ops/tools/git-preflight`. Each enrolled repository vendors the same runner into `.preflight/`, alongside its own reviewed `manifest.json`. GitHub and local pushes execute that same manifest. Existing required GitHub checks remain authoritative, including checks explicitly listed as cloud-only.
+Canonical source: `jwedow/AtlasAX-ops/tools/git-preflight`. Each enrolled repository vendors the same runner into `.preflight/`, alongside its own reviewed `manifest.json`. GitHub runs the full manifest; local pushes can select a dependency-closed `push_tasks` subset for fast feedback. Existing required GitHub checks remain authoritative, including checks explicitly listed as cloud-only.
 
 ## Install In A Checkout
 
@@ -25,3 +25,11 @@ Read the saved original hook directory in `git rev-parse --git-common-dir` / `au
 `python3 -m unittest discover -s .preflight/tests -v` (or `tools/git-preflight/tests` in this source repository) creates disposable repositories and remotes. It proves actual push blocking, success, dirty-source isolation, changed commits, multi-ref/non-HEAD pushes, deletion, failure aggregation, timeouts, dependency validation, fetched-base availability and original hook preservation. No live repository is pushed by these tests.
 
 The installer refuses relative `core.hooksPath` values before changing configuration: Git resolves those differently across worktrees and hook types. Reconcile that existing setup explicitly first. Absolute and home-relative (`~/`) paths are supported; original hook files are never edited. Removed or disabled original hooks are skipped, matching Git behavior. Installation works from any subdirectory.
+
+## Release Validation Ownership
+
+Keep local pushes fast: syntax, hook regression tests, and cheap repository guards. Use `push_tasks` to list their IDs. The default remains all tasks for backward compatibility. An empty/unknown/duplicate selection or omitted dependency blocks validation. GitHub deliberately ignores this selection and runs every task in `tasks`; no environment variable can silently select the fast profile.
+
+Application tests and builds must have one required GitHub owner. Remove duplicate tasks only after confirming equivalent coverage in another required workflow. If Preflight is the only required application check, keep its full application tasks. Do not remove a check because it is slow or because an optional workflow also runs it. Scope expensive checks only when the changed files can be classified reliably; unknown changes run the full check. Keep required verdict jobs reporting even when an irrelevant expensive job is intentionally skipped.
+
+Cancel obsolete validation runs for the same pull request. Do not cancel releases, migrations, or unrelated branches. Preserve original hooks and branch protection. A local pass is permission to push for review, not permission to merge or deploy.

@@ -204,3 +204,34 @@ class GitPreflightTest(unittest.TestCase):
         self.assertIn('relative hooksPath',result.stdout+result.stderr)
         self.assertEqual(self.git('config','core.hooksPath').stdout.strip(),'.hooks')
         self.assertNotEqual(self.run_cmd(['git','commit','--allow-empty','-m','blocked'],linked,check=False).returncode,0)
+
+    def profile(self, tasks, selected):
+        self.manifest(tasks)
+        p=self.repo/'.preflight/manifest.json'
+        data=json.loads(p.read_text());data['push_tasks']=selected
+        p.write_text(json.dumps(data));self.commit();self.install()
+
+    def test_push_uses_fast_tasks_but_ci_keeps_application_failure(self):
+        self.profile([self.task('fast','pass'),self.task('app','raise SystemExit(7)')],['fast'])
+        self.assertEqual(self.push().returncode,0)
+        ci=self.run_cmd([sys.executable,'.preflight/preflight.py'],check=False)
+        self.assertNotEqual(ci.returncode,0)
+        self.assertIn('FAIL app',ci.stdout)
+
+    def test_fast_failure_still_blocks_push(self):
+        self.profile([self.task('fast','raise SystemExit(1)'),self.task('app','pass')],['fast'])
+        self.assertNotEqual(self.push().returncode,0)
+
+    def test_invalid_push_profile_blocks(self):
+        for selected in [[],['missing'],['fast','fast'],'fast']:
+            with self.subTest(selected=selected):
+                self.profile([self.task('fast','pass')],selected)
+                self.assertNotEqual(self.push().returncode,0)
+
+    def test_omitted_dependency_blocks_instead_of_hanging(self):
+        self.profile([self.task('setup','pass'),self.task('fast','pass',needs=['setup'])],['fast'])
+        self.assertNotEqual(self.push().returncode,0)
+
+    def test_valid_dependency_closed_profile(self):
+        self.profile([self.task('setup','pass'),self.task('fast','pass',needs=['setup']),self.task('app','raise SystemExit(7)')],['setup','fast'])
+        self.assertEqual(self.push().returncode,0)
