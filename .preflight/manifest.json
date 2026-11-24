@@ -99,5 +99,9 @@
   ],
   "cloud_checks": [
     "Existing Quality Gate browser E2E tests retain their hosted browser installation"
+  ],
+  "push_tasks": [
+    "source-syntax",
+    "preflight-tests"
   ]
 }
